@@ -1,0 +1,27 @@
+{
+  "n_results": 1,
+  "page_number": 1,
+  "results_per_page": 10,
+  "n_pages": 1,
+  "available_n_pages": 1,
+  "results": [
+    {
+      "id": "FR_DEc2133ecc1293",
+      "language": "fr",
+      "headword": {
+        "text": "enjeu",
+        "pos": "noun"
+      },
+      "senses": [
+        {
+          "id": "FR_SE92432b5102e1",
+          "definition": "argent mis en jeu au début d'une partie"
+        },
+        {
+          "id": "FR_SE6c9d3daf38e5",
+          "definition": "ce qu'on peut gagner ou perdre"
+        }
+      ]
+    }
+  ]
+}
