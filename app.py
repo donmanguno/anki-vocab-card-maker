@@ -1,58 +1,66 @@
-import os
-import urllib.parse
-import genanki
-import requests
-from dotenv import load_dotenv
+import logging
 
-load_dotenv()
-LANG=os.getenv('LEXICALA_LANG')
-RAPIDAPI_KEY=os.getenv('RAPIDAPI_KEY')
-RAPIDAPI_HOST=os.getenv('RAPIDAPI_HOST')
+from config import env
+from genanki_utils import add_card_to_anki, write_to_deck
+from lexicala_scraper import lexicala_get
 
-my_deck = genanki.Deck(
-  int(os.getenv('ANKI_DECK_ID')),
-  os.getenv('ANKI_DECK_NAME'),
-)
-
-my_model = genanki.Model(
-  int(os.getenv('ANKI_MODEL_ID')),
-  os.getenv('ANKI_MODEL_NAME'),
-  fields=[
-    {'name': 'Word'},
-    {'name': 'Definition'},
-  ],
-  templates=[
-    {
-      'name': 'Card 1',
-      'qfmt': '{{Word}}',
-      'afmt': '{{FrontSide}}<hr id="answer">{{Definition}}',
-    },    
-		{
-      'name': 'Card 2',
-      'qfmt': '{{Definition}}',
-      'afmt': '{{FrontSide}}<hr id="answer">{{Word}}',
-    },
-  ])
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG,
+										format='%(asctime)s:%(levelname)s:%(name)s:%(message)s')
 
 headers = {
-    'x-rapidapi-key': RAPIDAPI_KEY,
-    'x-rapidapi-host': RAPIDAPI_HOST
+    'x-rapidapi-key': env['RAPIDAPI_KEY'],
+    'x-rapidapi-host': env['RAPIDAPI_HOST']
 }
 
-with open("wordlist.txt", "r") as f:
-	for word in f:
-		_word = word.strip()
+WORDLIST_FILENAME = "wordlist.txt"
+WORDS_FOUND_FILENAME = "words_found.txt"
+WORDS_NOT_FOUND_FILENAME = "words_not_found.txt"
 
-		url=f"https://{RAPIDAPI_HOST}/search"
-		querystring = { "text": _word, "language": LANG }
+def main():
+	words_not_found = []
+	words_found = []
+	with open(WORDLIST_FILENAME, "r") as wordlist_file:
+		wordlist = wordlist_file.read().splitlines()
+		for word in wordlist:
+			[responseObject, response] = lexicala_get(word)
+			if response.status_code == 429:
+				logger.warning('rate limited, aborting')
+				break
+			elif response.status_code == 200 and len(responseObject['results']) > 0:
+				try:
+					add_card_to_anki(word, responseObject['results'][0]['senses'])
+					words_found.append(word)
+				except Exception as e:
+					logger.error(f"coundn't process word {word}")
+					logger.error(e)
+					words_not_found.append(word)
+			else:
+				logger.warning(f"status code {response.status_code} for word {word}")
+				words_not_found.append(word)
 
-		response = requests.get(url, headers=headers, params=querystring)
-		responseObject=response.json()
-		print(responseObject)
-		my_note = genanki.Note(
-			model=my_model,
-			fields=[_word, responseObject['results'][0]['senses'][0]['definition']])
+	
+	write_to_deck('output.apkg')
 
-		my_deck.add_note(my_note)
+	# cleanup
+	with open(WORDS_NOT_FOUND_FILENAME, "a+") as words_not_found_file:
+		all_words_not_found = words_not_found_file.read().splitlines()
+		for word in words_not_found:
+			if word not in all_words_not_found:
+				words_not_found_file.write(word + '\n')
+				all_words_not_found.append(word)
 
-genanki.Package(my_deck).write_to_file('output.apkg')
+	with open (WORDS_FOUND_FILENAME, "a+") as words_found_file:
+		all_words_found = words_found_file.read().splitlines()
+		for word in words_found:
+			if word not in all_words_found:
+				words_found_file.write(word + '\n')
+				all_words_found.append(word)
+
+	with open (WORDLIST_FILENAME, "w") as wordlist_file:
+		for word in wordlist:
+			if word not in all_words_not_found and word not in all_words_found:
+				wordlist_file.write(word + '\n')
+
+if __name__ == '__main__':
+	main()

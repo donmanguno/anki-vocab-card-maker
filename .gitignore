@@ -1,3 +1,8 @@
+.vscode
+__pycache__
+.venv
 .env
 wordlist.txt
+words_found.txt
+words_not_found.txt
 output.apkg
